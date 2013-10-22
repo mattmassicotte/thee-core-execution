@@ -1,0 +1,93 @@
+include "stdio.h"
+include "stdlib.h"
+include "string.h"
+
+import ThreadPool
+import Semaphore
+
+namespace Core::Execution
+
+  public
+  enum QueueType
+    Serial
+    Concurrent
+    Distributed
+  end
+
+  struct Queue
+    *Pool pool
+    *Char name
+    QueueType type
+    *Semaphore semaphore
+  end
+
+  private
+  struct ClosureWorkItem
+    *Queue queue
+    *{} closure_ptr
+  end
+
+  *Queue normal_priority_pool
+
+  public
+  def Queue.sync({} closure)
+    if self->semaphore == null
+      closure()
+      return
+    end
+
+    self->semaphore.wait()
+    closure()
+    self->semaphore.signal()
+  end
+
+  private
+  def invoke_closure_item_and_dispose(*Void arg; *Void)
+    *ClosureWorkItem item = arg
+
+    // shenanigans
+    *{} closure_a = item->closure_ptr
+    {} closure = *closure_a
+
+    printf("got a closure %p to execute\n", arg)
+    item->queue.sync(closure)
+    printf("ran %p\n", arg)
+
+    three_closure_release(item->closure_ptr)
+    free(item)
+
+    return null
+  end
+
+  public
+  def queue_create(*Char name, QueueType type; *Queue)
+    *Queue queue
+
+    queue = malloc(sizeof(Queue))
+    queue->pool = Core::Execution::pool_create()
+    queue->name = name ? strdup(name) : null
+    queue->type = type
+    if type == Core::Execution::QueueType::Serial
+      queue->semaphore = Core::Execution::semaphore_create(1)
+    else
+      queue->semaphore = null
+    end
+
+    return queue
+  end
+
+  def Queue.async({} closure)
+    if self->type == Core::Execution::QueueType::Distributed && three_closure_get_flags(closure) & THREE_CLOSURE_FLAGS_HAS_REFERENCES
+      printf("a distributed closure cannot have references!\n")
+      return
+    end
+
+    *ClosureWorkItem item = malloc(sizeof(ClosureWorkItem))
+
+    item->queue = self
+    item->closure_ptr = three_closure_copy(closure)
+
+    self->pool.submit_work(item, Core::Execution::invoke_closure_item_and_dispose)
+  end
+
+end

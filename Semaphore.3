@@ -1,0 +1,35 @@
+include "stdlib.h"
+include "mach/mach.h"
+include "mach/task.h"
+include "mach/semaphore.h"
+//include "semaphore.h"
+
+namespace Core::Execution
+
+  public
+  struct Semaphore
+    //sem_t semaphore
+    semaphore_t mach_semaphore
+    Int x
+  end
+
+  def semaphore_create(Natural value; *Semaphore)
+    *Semaphore semaphore = malloc(sizeof(Semaphore))
+
+    // SYNC_POLICY_FIFO = 0x0
+    semaphore_create(mach_task_self_, &semaphore->mach_semaphore, 0x0, value)
+
+    return semaphore
+  end
+
+  def Semaphore.wait()
+    // sem_wait(&self->semaphore)
+    semaphore_wait(self->mach_semaphore)
+  end
+
+  def Semaphore.signal()
+    //sem_post(&self->semaphore)
+    semaphore_signal(self->mach_semaphore)
+  end
+
+end

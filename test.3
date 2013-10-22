@@ -1,0 +1,60 @@
+include "stdio.h"
+include "three/c11/threads.h"
+
+import Queue
+
+def delay_thread(Int seconds)
+  timespec ts
+
+  ts.tv_sec = seconds
+  ts.tv_nsec = 0
+
+  thrd_sleep(&ts, null)
+end
+
+def test_serial_queue()
+  *Core::Execution::Queue queue = Core::Execution::queue_create("myqueue", Core::Execution::QueueType::Serial)
+
+  Int value = 5
+
+  queue.async(do {
+    delay_thread(2)
+    printf("hello %d\n", value)
+  })
+
+  queue.async(do () {
+    value = 6
+    delay_thread(2)
+    printf("hello again %d\n", value)
+  })
+
+  printf("waiting %d\n", value)
+  delay_thread(5)
+  printf("done waiting %d\n", value)
+
+  queue.sync(do {
+    printf("delaying exit\n")
+  })
+end
+
+def test_distributed_queue()
+  *Core::Execution::Queue queue = Core::Execution::queue_create("myqueue", Core::Execution::QueueType::Distributed)
+
+  Int number = 5
+
+  queue.async(do {
+    printf("distributed hello %d\n", number)
+  })
+
+  queue.async(do (; Void; number){
+    printf("distributed hello with references %d\n", number)
+  })
+
+  delay_thread(2)
+end
+
+def main(Int argc, **Char argv; Int)
+  test_distributed_queue()
+
+  return 0
+end

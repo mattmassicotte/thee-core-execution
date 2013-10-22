@@ -1,173 +1,159 @@
 include "stdio.h"
 include "stdlib.h"
-include "three/runtime/threads.h"
-include "semaphore.h"
+include "three/c11/threads.h"
 
-namespace Core
-  namespace Execution
+import Semaphore
 
-    private
-    struct PoolItem
-      *(*Void arg; *Void) fn_ptr
-      *Void argument
-      *PoolItem next
-    end
+namespace Core::Execution
 
-    public
-    struct Pool
-      Natural thread_count
-      Natural free_threads
-      *thrd_t threads
-      *PoolItem item_list_head
-      sem_t semaphore
-    end
+  private
+  struct PoolItem
+    *(*Void arg; *Void) fn_ptr
+    *Void argument
+    *PoolItem next
+  end
 
-    def pool_thread_entry(*Void arg; Int)
-      return 0
-    end
+  public
+  struct Pool
+    Natural thread_count
+    Natural free_threads
+    *thrd_t threads
+    Bool run
+    *PoolItem item_list_head
+    *Semaphore semaphore
+  end
 
-    def pool_create(;*Pool)
-      *Pool pool
+  def pool_create(;*Pool)
+    *Pool pool
 
-      pool = malloc(sizeof(Pool))
-      pool->thread_count = 0
-      pool->free_threads = 0
-      pool->threads = null
-      pool->item_list_head = null
+    pool = malloc(sizeof(Pool))
+    pool->thread_count = 0
+    pool->free_threads = 0
+    pool->threads = null
+    pool->item_list_head = null
+    pool->run = true
+    pool->semaphore = Core::Execution::semaphore_create(0)
 
-      // TODO: check result
-      sem_init(&pool->semaphore, 0, 0)
+    return pool
+  end
 
-      return pool
-    end
+  private
+  def item_create(*Void arg, (*Void; *Void) fn; *PoolItem)
+    *PoolItem item
 
-    def item_create(*Void arg, (*Void; *Void) fn; *PoolItem)
-      *PoolItem item
+    item = malloc(sizeof(PoolItem))
+    item->argument = arg
+    item->fn_ptr = fn
+    item->next = null
 
-      item = malloc(sizeof(PoolItem))
-      item->argument = arg
-      item->fn_ptr = fn
-      item->next = null
+    return item
+  end
 
-      return item
-    end
-
-    def Pool.enqueue_item(*PoolItem item)
-      atomic
-        **PoolItem current = &self->item_list_head
-
-        loop
-          if *current == null
-            *current = item
-            break
-          end
-
-          current = &(*current)->next
-        end
-      end
-    end
-
-    def Pool.dequeue_item_and_retire(*PoolItem item; Bool)
-      *PoolItem current
-
-      // we should assert that the head is never null here
-      if self == null
-        printf("self is null, this is bad\n")
-      end
-
-      atomic
-        current = self->item_list_head
-        return false if current == null
-
-        self->item_list_head = current->next
-
-        // make a copy of the work item
-        *item = *current
-      end
-
-      printf("[thread:%p] running item %p\n", thrd_current(), current)
-
-      // here, we could do something like
-      // put the item into a free-list
-      free(current) // just free it for now
-
-      return true
-    end
-
-    def thread_start(*Void arg; Int)
-      *Pool pool = arg
+  def Pool.enqueue_item(*PoolItem item)
+    atomic
+      **PoolItem current = &self->item_list_head
 
       loop
-        PoolItem item
-
-        // TODO: check value
-        sem_wait(&pool->semaphore)
-
-        if pool.dequeue_item_and_retire(&item) == false
-          continue
+        if *current == null
+          *current = item
+          break
         end
 
-        // execute the item
-        atomic (pool->free_threads -= 1)
-        //item.fn_ptr(item.arg)
-        atomic (pool->free_threads += 1)
+        current = &(*current)->next
       end
+    end
+  end
 
-      return 0
+  def Pool.dequeue_item_and_retire(*PoolItem item; Bool)
+    *PoolItem current
+
+    // we should assert that the head is never null here
+    if self == null
+      printf("self is null, this is bad\n")
     end
 
-    def Pool.schedule_thread()
-      // if we have free threads, we have nothing to do
-      return if atomic (self->free_threads > 0)
+    atomic
+      current = self->item_list_head
+      return false if current == null
 
-      // ok, we don't have any free threads.  We need to create one
-      thrd_t thread
+      self->item_list_head = current->next
 
-      // TODO: check return value
-      thrd_create(&thread, Core::Execution::thread_start, self)
+      // make a copy of the work item
+      *item = *current
     end
 
-    def Pool.submit_work(*Void arg, (*Void; *Void) fn)
-      // make work unit
-      *PoolItem item = Core::Execution::item_create(arg, fn)
+//      printf("[thread:%p] running item %p\n", thrd_current(), current)
 
-      printf("[pool:%p] submitting work item %p\n", self, item)
+    // here, we could do something like
+    // put the item into a free-list
+    free(current) // just free it for now
 
-      // add it to the queue
-      self.enqueue_item(item)
+    return true
+  end
+
+  def pool_thread_entry(*Void arg; Int)
+    *Pool pool = arg
+
+    loop pool->run
+      PoolItem item
 
       // TODO: check value
-      sem_post(&self->semaphore)
+      pool->semaphore.wait()
 
-      self.schedule_thread()
+      if pool.dequeue_item_and_retire(&item) == false
+        continue
+      end
+
+      // execute the item
+      // Keep track of how busy we are, so we know if we need to start up
+      // more threads.  This is a really bad way to do this, but its something.
+      atomic (pool->free_threads -= 1)
+      item.fn_ptr(item.argument)
+      atomic (pool->free_threads += 1)
     end
 
-    def Pool.wait_for_work_done()
-      timespec ts
-
-      ts.tv_sec = 5
-      ts.tv_nsec = 0
-
-      thrd_sleep(&ts, null)
-    end
-
-  end
-end
-
-def test_work(*Void arg; *Void)
-  printf("test work!\n")
-
-  return null
-end
-
-def main(Int argc, **Char argv; Int)
-  *Core::Execution::Pool pool = Core::Execution::pool_create()
-
-  for (Int i in 0:10)
-    pool.submit_work(null, test_work)
+    return 0
   end
 
-  pool.wait_for_work_done()
+  def Pool.schedule_thread()
+    // if we have free threads, we have nothing to do
+    return if atomic (self->free_threads > 0)
 
-  return 0
+    // ok, we don't have any free threads.  We need to create one
+    thrd_t thread
+
+    // TODO: check return value
+    thrd_create(&thread, Core::Execution::pool_thread_entry, self)
+  end
+
+  public
+  def Pool.submit_work(*Void arg, (*Void; *Void) fn)
+    // make work unit
+    *PoolItem item = Core::Execution::item_create(arg, fn)
+
+//      printf("[pool:%p] submitting work item %p\n", self, item)
+
+    // add it to the queue
+    self.enqueue_item(item)
+
+    self->semaphore.signal()
+
+    self.schedule_thread()
+  end
+
+  def Pool.wait_for_work_done()
+//      self->run = false
+//      barrier
+//
+//      for (Int i in 0:self->thread_count)
+//        sem_post(&self->semaphore) // post to wake threads
+//      end
+   timespec ts
+
+   ts.tv_sec = 5
+   ts.tv_nsec = 0
+
+   thrd_sleep(&ts, null)
+  end
+
 end
