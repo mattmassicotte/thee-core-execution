@@ -8,29 +8,29 @@ import Semaphore
 
 namespace Core::Execution
 
-    public
-    enum QueueType
-        Serial
-        Concurrent
-        Distributed
-    end
+  public
+  enum QueueType
+    Serial
+    Concurrent
+    Distributed
+  end
 
-    struct Queue
-        *Pool pool
-        *Char name
-        QueueType type
-        *Semaphore semaphore
-    end
+  struct Queue
+    *Pool pool
+    *Char name
+    QueueType type
+    *Semaphore semaphore
+  end
 
-    private
-    struct ClosureWorkItem
-        *Queue queue
-        *{} closure_ptr
-    end
+  private
+  struct ClosureWorkItem
+    *Queue queue
+    *{} closure_ptr
+  end
 
-    *Queue normal_priority_pool
+  *Queue normal_priority_pool
 
-    public
+  public
   def Queue.sync({} closure)
     if self->semaphore == null
       closure()
@@ -73,22 +73,22 @@ namespace Core::Execution
     return queue
   end
 
-    def get_global_queue(; *Queue)
-        if normal_priority_pool == null
-            normal_priority_pool = Core::Execution::queue_create("normal-priority", Core::Execution::QueueType::Concurrent)
-        end
-
-        return normal_priority_pool
+  def get_global_queue(; *Queue)
+    if normal_priority_pool == null
+      normal_priority_pool = Core::Execution::queue_create("normal-priority", Core::Execution::QueueType::Concurrent)
     end
 
-    def main()
-        timespec ts
+    return normal_priority_pool
+  end
 
-        ts.tv_sec = 10
-        ts.tv_nsec = 0
+  def main()
+    timespec ts
 
-        thrd_sleep(&ts, null)
-    end
+    ts.tv_sec = 10
+    ts.tv_nsec = 0
+
+    thrd_sleep(&ts, null)
+  end
 
   def Queue.async({} closure)
     if self->type == Core::Execution::QueueType::Distributed && three_closure_get_flags(closure) & THREE_CLOSURE_FLAGS_HAS_REFERENCES
