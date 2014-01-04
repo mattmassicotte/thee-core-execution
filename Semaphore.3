@@ -1,35 +1,50 @@
 include "stdlib.h"
+%if darwin
 include "mach/mach.h"
 include "mach/task.h"
 include "mach/semaphore.h"
-//include "semaphore.h"
+%else
+include "semaphore.h"
+%end
 
 namespace Core::Execution
 
   public
   struct Semaphore
-    //sem_t semaphore
+%if darwin
     semaphore_t mach_semaphore
+%else
+    sem_t semaphore
+%end
     Int x
   end
 
   def semaphore_create(Natural value; *Semaphore)
     *Semaphore semaphore = malloc(sizeof(Semaphore))
 
-    // SYNC_POLICY_FIFO = 0x0
+%if darwin
+    # SYNC_POLICY_FIFO = 0x0
     semaphore_create(mach_task_self_, &semaphore->mach_semaphore, 0x0, value)
-
+%else
+    return null if sem_init(&semaphore->semaphore, 0, value) == -1
+%end
     return semaphore
   end
 
   def Semaphore.wait()
-    // sem_wait(&self->semaphore)
+%if darwin
     semaphore_wait(self->mach_semaphore)
+%else
+    sem_wait(&self->semaphore)
+%end
   end
 
   def Semaphore.signal()
-    //sem_post(&self->semaphore)
+%if darwin
     semaphore_signal(self->mach_semaphore)
+%else
+    sem_post(&self->semaphore)
+%end
   end
 
 end

@@ -67,7 +67,7 @@ namespace Core::Execution
   def Pool.dequeue_item_and_retire(*PoolItem item; Bool)
     *PoolItem current
 
-    // we should assert that the head is never null here
+    # we should assert that the head is never null here
     if self == null
       printf("self is null, this is bad\n")
     end
@@ -78,15 +78,15 @@ namespace Core::Execution
 
       self->item_list_head = current->next
 
-      // make a copy of the work item
+      # make a copy of the work item
       *item = *current
     end
 
-//      printf("[thread:%p] running item %p\n", thrd_current(), current)
+#      printf("[thread:%p] running item %p\n", thrd_current(), current)
 
-    // here, we could do something like
-    // put the item into a free-list
-    free(current) // just free it for now
+    # here, we could do something like
+    # put the item into a free-list
+    free(current) # just free it for now
 
     return true
   end
@@ -97,16 +97,16 @@ namespace Core::Execution
     loop pool->run
       PoolItem item
 
-      // TODO: check value
+      # TODO: check value
       pool->semaphore.wait()
 
       if pool.dequeue_item_and_retire(&item) == false
         continue
       end
 
-      // execute the item
-      // Keep track of how busy we are, so we know if we need to start up
-      // more threads.  This is a really bad way to do this, but its something.
+      # execute the item
+      # Keep track of how busy we are, so we know if we need to start up
+      # more threads.  This is a really bad way to do this, but its something.
       atomic (pool->free_threads -= 1)
       item.fn_ptr(item.argument)
       atomic (pool->free_threads += 1)
@@ -116,24 +116,24 @@ namespace Core::Execution
   end
 
   def Pool.schedule_thread()
-    // if we have free threads, we have nothing to do
+    # if we have free threads, we have nothing to do
     return if atomic (self->free_threads > 0)
 
-    // ok, we don't have any free threads.  We need to create one
+    # ok, we don't have any free threads.  We need to create one
     thrd_t thread
 
-    // TODO: check return value
+    # TODO: check return value
     thrd_create(&thread, Core::Execution::pool_thread_entry, self)
   end
 
   public
   def Pool.submit_work(*Void arg, (*Void; *Void) fn)
-    // make work unit
+    # make work unit
     *PoolItem item = Core::Execution::item_create(arg, fn)
 
-//      printf("[pool:%p] submitting work item %p\n", self, item)
+#      printf("[pool:%p] submitting work item %p\n", self, item)
 
-    // add it to the queue
+    # add it to the queue
     self.enqueue_item(item)
 
     self->semaphore.signal()
@@ -142,12 +142,12 @@ namespace Core::Execution
   end
 
   def Pool.wait_for_work_done()
-//      self->run = false
-//      barrier
-//
-//      for (Int i in 0:self->thread_count)
-//        sem_post(&self->semaphore) // post to wake threads
-//      end
+#      self->run = false
+#      barrier
+#
+#      for (Int i in 0:self->thread_count)
+#        sem_post(&self->semaphore) # post to wake threads
+#      end
    timespec ts
 
    ts.tv_sec = 5
