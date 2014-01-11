@@ -46,9 +46,9 @@ namespace Core::Execution
   def invoke_closure_item_and_dispose(*Void arg; *Void)
     *ClosureWorkItem item = arg
 
-    printf("got a closure %p to execute\n", arg)
+    printf("[Execution::Queue] got a closure %p to execute\n", arg)
     item->queue.sync(*item->closure_ptr)
-    printf("ran %p\n", arg)
+    printf("[Execution::Queue] ran %p\n", arg)
 
     three_closure_release(item->closure_ptr)
     free(item)
