@@ -23,8 +23,7 @@ namespace Core::Execution
     *Semaphore semaphore = malloc(sizeof(Semaphore))
 
 %if darwin
-    # SYNC_POLICY_FIFO = 0x0
-    semaphore_create(mach_task_self_, &semaphore->mach_semaphore, 0x0, value)
+    semaphore_create(mach_task_self_, &semaphore->mach_semaphore, SYNC_POLICY_FIFO, value)
 %else
     return null if sem_init(&semaphore->semaphore, 0, value) == -1
 %end
